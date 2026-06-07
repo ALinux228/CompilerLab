@@ -97,8 +97,8 @@ namespace CompilerLab
             {
                 _lineErrCnt++; 
                 string errorNumber = _lineErrCnt.ToString("D2");
-                int randomPosition = random.Next(2, 7);
-                string pointerLine = new string(' ', randomPosition) + "^";
+                int charPosition = error.ErrorPosition.CharNumber + 1;
+                string pointerLine = new string(' ', charPosition) + "^";
 
                 byte currentKey = (byte)(error.ErrorCode);
                 string errorText = ErrorTable.Error[currentKey];
