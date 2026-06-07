@@ -1,19 +1,23 @@
-using System;
 using CompilerLab;
+using System;
+using System.IO;
 
-internal class Program
+namespace CompilerLab
 {
-    private static void Main(string[] args)
+    class Program
     {
-        string filePath = @"C:\TASM\test.pas";
-        InputOutput.ReadFile(filePath);
-
-        while (InputOutput.Ch != '\0')
+        static void Main(string[] args)
         {
-            InputOutput.NextCh();
-        }
+            InputOutput.ReadFile(@"C:\TASM\test.pas");
 
-        Console.WriteLine("\nНажмите Enter для выхода из программы...");
-        Console.ReadLine();
+            LexicalAnalyzer analyzer = new LexicalAnalyzer();
+            using (StreamWriter writer = new StreamWriter(@"C:\TASM\codes.txt"))
+            while (!InputOutput.IsEndOfFile)
+            {
+                byte sym = analyzer.NextSym();
+                writer.Write(sym + " ");
+            }
+            Console.WriteLine("Процесс завершен успешно: коды символов записаны в файл.");
+        }
     }
 }
