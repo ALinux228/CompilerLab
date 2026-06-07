@@ -25,25 +25,33 @@ namespace CompilerLab
 
         public static char Ch
         {
-            get 
-            { 
-                return _ch; 
+            get
+            {
+                return _ch;
             }
-            set 
-            { 
-                _ch = value; 
+            set
+            {
+                _ch = value;
+            }
+        }
+
+        public static bool IsEndOfFile
+        {
+            get
+            {
+                return _isEndOfFile;
             }
         }
 
         public static TextPosition PositionNow
         {
-            get 
-            { 
-                return _positionNow; 
+            get
+            {
+                return _positionNow;
             }
             set
-            { 
-                _positionNow = value; 
+            {
+                _positionNow = value;
             }
         }
 
@@ -98,8 +106,8 @@ namespace CompilerLab
 
             if (_positionNow.CharNumber == _lastInLine)
             {
-                Console.WriteLine(_line);
-                ErrorHandler.GenerateRandomErrors(_positionNow, _line);
+                Console.WriteLine("      " + _line);
+                // ErrorHandler.GenerateRandomErrors(_positionNow, _line);
                 ErrorHandler.PrintErrorsForLine();
 
                 ReadNextLine();
@@ -122,7 +130,7 @@ namespace CompilerLab
             }
             else if (_line.Length == 0)
             {
-                Ch = ' '; 
+                Ch = ' ';
             }
             else
             {
@@ -136,7 +144,7 @@ namespace CompilerLab
             if (!_file.EndOfStream)
             {
                 _line = _file.ReadLine();
-                _lastInLine = 0;
+                _lastInLine = (byte)(_line.Length - 1);
             }
             else
             {
@@ -155,6 +163,14 @@ namespace CompilerLab
                 _file.Dispose();
                 _file = null;
             }
+        }
+
+        public static bool IsEndOfLine()
+        {
+            if (_isEndOfFile)
+                return true;
+
+            return _positionNow.CharNumber >= _lastInLine;
         }
     }
 }
