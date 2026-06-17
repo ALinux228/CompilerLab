@@ -1,452 +1,615 @@
-using CompilerLab;
 using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 
-namespace CompilerLab
+namespace Compiler
 {
-    class SyntaxAnalyzer
+    internal class SyntaxAnalyzer
     {
         private LexicalAnalyzer _lex;
-        private byte _symbol;
+        private bool _hasError = false;
 
         public SyntaxAnalyzer(LexicalAnalyzer lex)
         {
             _lex = lex;
-            NextSym();
         }
 
-        private void NextSym()
+        public void Analyze()
         {
-            _symbol = _lex.NextSym();
+            _lex.NextToken();
+            ParseProgram();
         }
 
-        private void accept(byte symbolExpected, byte err)
+        private void ParseProgram()
         {
-
-            if (_symbol == symbolExpected)
+            if (_lex.CurrentCode != 1)
             {
-                NextSym();
+                InputOutput.AddError(301, _lex.CurrentPosition);
             }
             else
             {
-                ErrorHandler.AddError(InputOutput.PositionNow, err);
+                _lex.NextToken();
             }
-        }
 
-        private bool Belong(byte element, HashSet<byte> set)
-        {
-            return set != null && set.Contains(element);
-        }
-
-        private void SkipTo(HashSet<byte> where)
-        {
-            while (_symbol != 0 && !Belong(_symbol, where))
+            if (_lex.CurrentCode != LexicalAnalyzer.IdentifierCode)
             {
-                NextSym();
-            }
-        }
-
-        private void SkipTo2(HashSet<byte> start, HashSet<byte> follow)
-        {
-            while (_symbol != 0 && !Belong(_symbol, start) && !Belong(_symbol, follow))
-            {
-                NextSym();
-            }
-        }
-
-        // Программа
-        public void Program()
-        {
-            accept(LexicalAnalyzer.programsy, 214);
-            accept(LexicalAnalyzer.ident, 205);
-
-            if (_symbol != LexicalAnalyzer.semicolon)
-            {
-                ErrorHandler.AddError(InputOutput.PositionNow, 207);
-                SkipTo(new HashSet<byte> {
-                        LexicalAnalyzer.varsy,
-                        LexicalAnalyzer.typesy,
-                        LexicalAnalyzer.beginsy
-                });
+                InputOutput.AddError(302, _lex.CurrentPosition);
             }
             else
             {
-                accept(LexicalAnalyzer.semicolon, 207);
+                _lex.NextToken();
             }
 
-            Block();
-            accept(LexicalAnalyzer.point, 215);
-        }
+            if (_lex.CurrentCode != (int)';')
+            {
+                InputOutput.AddError(303, _lex.CurrentPosition);
+            }
+            else
+            {
+                _lex.NextToken();
+            }
 
-        // Блок
-        public void Block()
-        {
-            TypeSection();
-            VarSection();
-            Operator();
-        }
+            ParseVarSection();
+            ParseCompoundStatement();
 
-        // Секция типов
-
-        private void TypeSection()
-        {
-            if (_symbol != LexicalAnalyzer.typesy)
+            if (InputOutput.HasUnclosedComment)
             {
                 return;
             }
-            NextSym();
-            TypeDeclaration();
-            accept(LexicalAnalyzer.semicolon, 207);
-            while (_symbol == LexicalAnalyzer.ident)
-            {
-                TypeDeclaration();
-                accept(LexicalAnalyzer.semicolon, 207);
-            }
-        }
 
-        private void TypeDeclaration()
-        {
-            accept(LexicalAnalyzer.ident, 205);
-            accept(LexicalAnalyzer.equal, 213);
-            TypeSpec();
-        }
-
-        private void TypeSpec()
-        {
-            if (_symbol == LexicalAnalyzer.recordsy)
+            if (_lex.CurrentCode != (int)'.')
             {
-                RecordType();
-            }
-            else if (_symbol == LexicalAnalyzer.arraysy)
-            {
-                ArrayType();
+                InputOutput.AddError(314, _lex.CurrentPosition);
             }
             else
             {
-                SimpleType();
+                _lex.NextToken();
             }
+
         }
 
-        private void ArrayType()
+        private void ParseVarSection()
         {
-            if (_symbol == LexicalAnalyzer.arraysy)
-            {
-                NextSym();  
-            }
-
-            accept(LexicalAnalyzer.lbracket, 221);
-            accept(LexicalAnalyzer.intc, 222);
-            accept(LexicalAnalyzer.twopoints, 223);
-            accept(LexicalAnalyzer.intc, 222);
-            accept(LexicalAnalyzer.rbracket, 224);
-            accept(LexicalAnalyzer.ofsy, 225);
-            SimpleType();
-        }
-
-        private void RecordType()
-        {
-            accept(LexicalAnalyzer.recordsy, 213);
-            while (_symbol == LexicalAnalyzer.ident)
-            {
-                IdentList();
-                accept(LexicalAnalyzer.colon, 206);
-                TypeSpec();
-                accept(LexicalAnalyzer.semicolon, 207);
-            }
-            accept(LexicalAnalyzer.endsy, 209);
-        }
-
-        // Список идентификаторов
-        private void IdentList()
-        {
-            accept(LexicalAnalyzer.ident, 205);
-            while (_symbol == LexicalAnalyzer.comma)
-            {
-                NextSym();
-                accept(LexicalAnalyzer.ident, 205);
-            }
-        }
-
-        // Простые типы
-        private void SimpleType()
-        {
-            if (_symbol == LexicalAnalyzer.ident)
-            {
-                accept(LexicalAnalyzer.ident, 208);
-            }
-            else
-            {
-                ErrorHandler.AddError(InputOutput.PositionNow, 208);
-                SkipTo(new HashSet<byte> {
-                    LexicalAnalyzer.semicolon,
-                    LexicalAnalyzer.endsy,
-                    LexicalAnalyzer.rightpar
-                });
-            }
-        }
-
-        // Секция переменных
-        private void VarSection()
-        {
-            if (_symbol != LexicalAnalyzer.varsy)
+            if (_lex.CurrentCode != 2)
             {
                 return;
             }
-            NextSym();
-            VarDeclaration();
-            accept(LexicalAnalyzer.semicolon, 207);
-            while (_symbol == LexicalAnalyzer.ident)
+
+            _lex.NextToken();
+
+            while (_lex.CurrentCode == LexicalAnalyzer.IdentifierCode)
             {
-                VarDeclaration();
-                accept(LexicalAnalyzer.semicolon, 207);
+                ParseVariableDeclaration();
             }
         }
 
-        private void VarDeclaration()
+        private void ParseCompoundStatement()
         {
-            IdentList();
-            accept(LexicalAnalyzer.colon, 206);
-            TypeSpec();
-        }
-
-        // Операторы
-        private void Operator()
-        {
-            if (_symbol == LexicalAnalyzer.beginsy)
+            if (_lex.CurrentCode != 4)
             {
-                CompoundOperator();
+                InputOutput.AddError(306, _lex.CurrentPosition);
+                return;
             }
-            else if (_symbol == LexicalAnalyzer.ifsy)
-            {
-                IfOperator();
-            }
-            else if (_symbol == LexicalAnalyzer.whilesy)
-            {
-                WhileOperator();
-            }
-            else if (_symbol == LexicalAnalyzer.repeatsy)
-            {
-                RepeatOperator();
-            }
-            else if (_symbol == LexicalAnalyzer.forsy)
-            {
-                ForOperator();
-            }
-            else if (_symbol == LexicalAnalyzer.withsy)
-            {
-                WithOperator();
-            }
-            else if (_symbol == LexicalAnalyzer.ident)
-            {
-                AssignOperator();
-            }
-            else
-            {
-                ErrorHandler.AddError(InputOutput.PositionNow, 213);
-                SkipTo(new HashSet<byte> {
-                    LexicalAnalyzer.semicolon,
-                    LexicalAnalyzer.endsy,
-                    LexicalAnalyzer.elsesy,
-                    LexicalAnalyzer.untilsy
-                });
-            }
-        }
 
-        // Составной оператор
-        private void CompoundOperator()
-        {
-            accept(LexicalAnalyzer.beginsy, 210);
-            Operator();
-            while (_symbol == LexicalAnalyzer.semicolon)
+            _lex.NextToken();
+
+            while (_lex.CurrentCode != 0 && _lex.CurrentCode != 5)
             {
-                NextSym();
-                if (_symbol == LexicalAnalyzer.endsy)
-                    break;
-                Operator();
-            }
-            accept(LexicalAnalyzer.endsy, 209);
-        }
+                ParseStatement();
 
-        // Оператор условия
-        private void IfOperator()
-        {
-            accept(LexicalAnalyzer.ifsy, 230);
-            Expression();
-            accept(LexicalAnalyzer.thensy, 231);
-            Operator();
-            if (_symbol == LexicalAnalyzer.elsesy)
-            {
-                NextSym();
-                Operator();
-            }
-        }
-
-        // Оператор цикла
-        private void WhileOperator()
-        {
-            accept(LexicalAnalyzer.whilesy, 240);
-            Expression();
-            accept(LexicalAnalyzer.dosy, 241);
-            Operator();
-        }
-
-        private void RepeatOperator()
-        {
-            accept(LexicalAnalyzer.repeatsy, 242);
-            Operator();
-            while (_symbol == LexicalAnalyzer.semicolon)
-            {
-                NextSym();
-                if (_symbol == LexicalAnalyzer.untilsy)
-                    break;
-                Operator();
-            }
-            accept(LexicalAnalyzer.untilsy, 243);
-            Expression();
-        }
-
-        private void ForOperator()
-        {
-            accept(LexicalAnalyzer.forsy, 244);
-            Variable();
-
-            if (_symbol == LexicalAnalyzer.assign)
-                accept(LexicalAnalyzer.assign, 211);
-            else
-                ErrorHandler.AddError(InputOutput.PositionNow, 211);
-
-            Expression();
-
-            if (_symbol == LexicalAnalyzer.tosy)
-                accept(LexicalAnalyzer.tosy, 245);
-            else if (_symbol == LexicalAnalyzer.downtosy)
-                accept(LexicalAnalyzer.downtosy, 246);
-            else
-                ErrorHandler.AddError(InputOutput.PositionNow, 247);
-
-            Expression();
-            accept(LexicalAnalyzer.dosy, 241);
-            Operator();
-        }
-
-        private void WithOperator()
-        {
-            accept(LexicalAnalyzer.withsy, 212);
-            Variable();
-            accept(LexicalAnalyzer.dosy, 213);
-            Operator();
-        }
-
-        // Переменная
-        private void Variable()
-        {
-            accept(LexicalAnalyzer.ident, 205);
-            while (_symbol == LexicalAnalyzer.point || _symbol == LexicalAnalyzer.lbracket)
-            {
-                if (_symbol == LexicalAnalyzer.point)
+                if (_lex.CurrentCode == (int)';')
                 {
-                    NextSym();
-                    accept(LexicalAnalyzer.ident, 205);
+                    _lex.NextToken();
                 }
-                else if (_symbol == LexicalAnalyzer.lbracket)
+                else if (_lex.CurrentCode != 5 && _lex.CurrentCode != 0)
                 {
-                    NextSym();
-                    Expression();
-                    accept(LexicalAnalyzer.rbracket, 224);
+                    if (!_hasError)
+                    {
+                        InputOutput.AddError(303, _lex.CurrentPosition);
+                    }
+                    _lex.NextToken();
                 }
             }
-        }
 
-        // Оператор присваивания
+            if (_lex.CurrentCode == 0)
+            {
+                return;
+            }
 
-        private void AssignOperator()
-        {
-            Variable();
-            accept(LexicalAnalyzer.assign, 211);
-            Expression();
-        }
-
-        // Выражения
-        private void Expression()
-        {
-            SimpleExpression();
-            if (_symbol == LexicalAnalyzer.equal ||
-                _symbol == LexicalAnalyzer.later ||
-                _symbol == LexicalAnalyzer.greater ||
-                _symbol == LexicalAnalyzer.laterequal ||
-                _symbol == LexicalAnalyzer.greaterequal ||
-                _symbol == LexicalAnalyzer.latergreater)
+            if (_lex.CurrentCode != 5)
             {
-                NextSym();
-                SimpleExpression();
-            }
-        }
-
-        private void SimpleExpression()
-        {
-            if (_symbol == LexicalAnalyzer.plus || _symbol == LexicalAnalyzer.minus)
-            {
-                NextSym();
-            }
-            Term();
-            while (_symbol == LexicalAnalyzer.plus || _symbol == LexicalAnalyzer.minus || _symbol == LexicalAnalyzer.orsy)
-            {
-                NextSym();
-                Term();
-            }
-        }
-
-        private void Term()
-        {
-            Factor();
-            while (_symbol == LexicalAnalyzer.star || _symbol == LexicalAnalyzer.slash ||
-                   _symbol == LexicalAnalyzer.divsy || _symbol == LexicalAnalyzer.modsy ||
-                   _symbol == LexicalAnalyzer.andsy)
-            {
-                NextSym();
-                Factor();
-            }
-        }
-
-        private void Factor()
-        {
-            if (_symbol == LexicalAnalyzer.ident)
-            {
-                Variable();
-            }
-            else if (_symbol == LexicalAnalyzer.intc)
-            {
-                NextSym();
-            }
-            else if (_symbol == LexicalAnalyzer.floatc)
-            {
-                NextSym();
-            }
-            else if (_symbol == LexicalAnalyzer.leftpar)
-            {
-                NextSym();
-                Expression();
-                accept(LexicalAnalyzer.rightpar, 248);
-            }
-            else if (_symbol == LexicalAnalyzer.notsy)
-            {
-                NextSym();
-                Factor();
+                InputOutput.AddError(307, _lex.CurrentPosition);
             }
             else
             {
-                ErrorHandler.AddError(InputOutput.PositionNow, 249);
-                SkipTo(new HashSet<byte> {
-                    LexicalAnalyzer.semicolon,
-                    LexicalAnalyzer.rightpar,
-                    LexicalAnalyzer.comma,
-                    LexicalAnalyzer.endsy,
-                    LexicalAnalyzer.thensy,
-                    LexicalAnalyzer.dosy,
-                    LexicalAnalyzer.untilsy,
-                    LexicalAnalyzer.elsesy,
-                    LexicalAnalyzer.rbracket
-                });
+                _lex.NextToken();
+            }
+        }
+
+        private void ParseStatement()
+        {
+            while (_lex.CurrentCode == 100) 
+            {
+                _lex.NextToken();
+            }
+
+            if (_lex.CurrentCode == LexicalAnalyzer.IdentifierCode)
+            {
+                ParseAssignment();
+            }
+            else if (_lex.CurrentCode == 4)
+            {
+                ParseCompoundStatement();
+            }
+            else if (_lex.CurrentCode == 9)
+            {
+                ParseIfStatement();
+            }
+            else if (_lex.CurrentCode == 12)
+            {
+                ParseWhileStatement();
+            }
+            else if (_lex.CurrentCode == 17)
+            {
+                ParseRepeatStatement();
+            }
+            else if (_lex.CurrentCode == 14)
+            {
+                ParseForStatement();
+            }
+            else
+            {
+                if (!_hasError)
+                {
+                    InputOutput.AddError(309, _lex.CurrentPosition);
+                }
+                SkipToNextStatement();
+            }
+        }
+
+        private void ParseIfStatement()
+        {
+            _lex.NextToken();
+            ParseExpression();
+
+            if (_lex.CurrentCode != 10)
+            {
+                if (!_hasError)
+                {
+                    InputOutput.AddError(310, _lex.CurrentPosition);
+                    _hasError = true;
+                }
+                SkipToNextStatement();
+                return;
+            }
+
+            _lex.NextToken();
+            ParseStatement();
+
+            if (_lex.CurrentCode == 11)
+            {
+                _lex.NextToken();
+                ParseStatement();
+            }
+        }
+
+        private void ParseWhileStatement()
+        {
+            _lex.NextToken();
+            ParseExpression();
+
+            if (_lex.CurrentCode != 13)
+            {
+                if (!_hasError)
+                {
+                    InputOutput.AddError(311, _lex.CurrentPosition);
+                    _hasError = true;
+                }
+                SkipToNextStatement();
+                return;
+            }
+
+            _lex.NextToken();
+            ParseStatement();
+        }
+
+        private void ParseRepeatStatement()
+        {
+            _lex.NextToken();
+
+            while (_lex.CurrentCode != 0 && _lex.CurrentCode != 18)
+            {
+                while (_lex.CurrentCode == (int)';')
+                {
+                    _lex.NextToken();
+                }
+                ParseStatement();
+                if (_lex.CurrentCode == (int)';')
+                {
+                    _lex.NextToken();
+                }
+                else if (_lex.CurrentCode != 18 && _lex.CurrentCode != 0)
+                {
+                    if (!_hasError)
+                    {
+                        InputOutput.AddError(303, _lex.CurrentPosition);
+                    }
+                    _lex.NextToken();
+                }
+            }
+
+
+            if (_lex.CurrentCode != 18)
+            {
+                if (!_hasError)
+                {
+                    InputOutput.AddError(312, _lex.CurrentPosition);
+                    _hasError = true;
+                }
+                return;
+            }
+            _lex.NextToken();
+            ParseExpression();
+        }
+
+        private void ParseForStatement()
+        {
+            _lex.NextToken();
+
+            if (_lex.CurrentCode != LexicalAnalyzer.IdentifierCode)
+            {
+                if (!_hasError)
+                {
+                    InputOutput.AddError(302, _lex.CurrentPosition);
+                    _hasError = true;
+                }
+                SkipToNextStatement();
+                return;
+            }
+
+            _lex.NextToken();
+
+            if (_lex.CurrentCode != LexicalAnalyzer.AssignCode)
+            {
+                if (!_hasError)
+                {
+                    InputOutput.AddError(308, _lex.CurrentPosition);
+                    _hasError = true;
+                }
+                SkipToNextStatement();
+                return;
+            }
+
+            _lex.NextToken();
+            ParseExpression();
+
+            if (_lex.CurrentCode != 15 && _lex.CurrentCode != 16)
+            {
+                if (!_hasError)
+                {
+                    InputOutput.AddError(317, _lex.CurrentPosition);
+                    _hasError = true;
+                }
+                SkipToNextStatement();
+                return;
+            }
+
+            _lex.NextToken();
+            ParseExpression();
+
+            if (_lex.CurrentCode != 13)
+            {
+                if (!_hasError)
+                {
+                    InputOutput.AddError(311, _lex.CurrentPosition);
+                    _hasError = true;
+                }
+                SkipToNextStatement();
+                return;
+            }
+
+            _lex.NextToken();
+            ParseStatement();
+        }
+
+        private void ParseAssignment()
+        {
+            ParseVariable();
+
+            if (_lex.CurrentCode != LexicalAnalyzer.AssignCode)
+            {
+                if (!_hasError)
+                {
+                    InputOutput.AddError(308, _lex.CurrentPosition);
+                    _hasError = true;
+                }
+                SkipToNextStatement();
+                return;
+            }
+
+            _lex.NextToken();
+            ParseExpression();
+        }
+
+        private void ParseVariable()
+        {
+            if (_lex.CurrentCode != LexicalAnalyzer.IdentifierCode)
+            {
+                if (!_hasError)
+                {
+                    InputOutput.AddError(302, _lex.CurrentPosition);
+                }
+                return;
+            }
+
+            _lex.NextToken();
+
+            if (_lex.CurrentCode == LexicalAnalyzer.LeftSquareBracketCode)
+            {
+                _lex.NextToken();
+                ParseExpression();
+
+                if (_lex.CurrentCode != LexicalAnalyzer.RightSquareBracketCode)
+                {
+                    if (!_hasError)
+                    {
+                        InputOutput.AddError(315, _lex.CurrentPosition);
+                        _hasError = true;
+                    }
+                    SkipTo(LexicalAnalyzer.RightSquareBracketCode);
+                    if (_lex.CurrentCode == LexicalAnalyzer.RightSquareBracketCode)
+                    {
+                        _lex.NextToken();
+                    }
+                }
+                else
+                {
+                    _lex.NextToken();
+                }
+            }
+        }
+
+        private void ParseExpression()
+        {
+            ParseSimpleExpression();
+
+            if (IsRelationOperator(_lex.CurrentCode))
+            {
+                _lex.NextToken();
+                ParseSimpleExpression();
+            }
+        }
+
+        private void ParseSimpleExpression()
+        {
+            if (_lex.CurrentCode == (int)'+' || _lex.CurrentCode == (int)'-')
+            {
+                _lex.NextToken();
+            }
+
+            ParseTerm();
+
+            while (_lex.CurrentCode == (int)'+' || _lex.CurrentCode == (int)'-')
+            {
+                _lex.NextToken();
+                ParseTerm();
+            }
+        }
+
+        private void ParseTerm()
+        {
+            ParseFactor();
+
+            while (_lex.CurrentCode == (int)'*' || _lex.CurrentCode == (int)'/')
+            {
+                _lex.NextToken();
+                ParseFactor();
+            }
+        }
+
+        private void ParseFactor()
+        {
+            if (_lex.CurrentCode == LexicalAnalyzer.IdentifierCode)
+            {
+                ParseVariable();
+            }
+            else if (_lex.CurrentCode == LexicalAnalyzer.IntegerCode)
+            {
+                _lex.NextToken();
+            }
+            else if (_lex.CurrentCode == (int)'(')
+            {
+                _lex.NextToken();
+                ParseExpression();
+
+                if (_lex.CurrentCode != (int)')')
+                {
+                    if (!_hasError)
+                    {
+                        InputOutput.AddError(309, _lex.CurrentPosition);
+                    }
+                }
+                else
+                {
+                    _lex.NextToken();
+                }
+            }
+            else
+            {
+                if (!_hasError)
+                {
+                    InputOutput.AddError(309, _lex.CurrentPosition);
+                }
+            }
+        }
+
+        private bool IsRelationOperator(int code)
+        {
+            return code == (int)'=' ||
+                   code == LexicalAnalyzer.LessCode ||
+                   code == LexicalAnalyzer.GreaterCode ||
+                   code == LexicalAnalyzer.LessOrEqualCode ||
+                   code == LexicalAnalyzer.GreaterOrEqualCode ||
+                   code == LexicalAnalyzer.NotEqualCode;
+        }
+
+        private void SkipToNextStatement()
+        {
+            while (_lex.CurrentCode != 0 &&
+                   _lex.CurrentCode != (int)';' &&
+                   _lex.CurrentCode != 5)
+            {
+                _lex.NextToken();
+            }
+            _hasError = false;
+        }
+
+        private void ParseVariableDeclaration()
+        {
+            ParseIdentifierList();
+
+            if (_lex.CurrentCode != (int)':')
+            {
+                InputOutput.AddError(304, _lex.CurrentPosition);
+                SkipTo((int)';');
+            }
+            else
+            {
+                _lex.NextToken();
+            }
+
+            ParseType();
+
+            if (_lex.CurrentCode != (int)';')
+            {
+                InputOutput.AddError(303, _lex.CurrentPosition);
+                SkipTo((int)';');
+            }
+
+            if (_lex.CurrentCode == (int)';')
+            {
+                _lex.NextToken();
+            }
+        }
+
+        private void ParseIdentifierList()
+        {
+            if (_lex.CurrentCode != LexicalAnalyzer.IdentifierCode)
+            {
+                InputOutput.AddError(302, _lex.CurrentPosition);
+                return;
+            }
+
+            _lex.NextToken();
+
+            while (_lex.CurrentCode == (int)',')
+            {
+                _lex.NextToken();
+
+                if (_lex.CurrentCode != LexicalAnalyzer.IdentifierCode)
+                {
+                    InputOutput.AddError(302, _lex.CurrentPosition);
+                    return;
+                }
+
+                _lex.NextToken();
+            }
+        }
+
+        private void ParseType()
+        {
+            if (_lex.CurrentCode == 6 || _lex.CurrentCode == 7 || _lex.CurrentCode == 8)
+            {
+                _lex.NextToken();
+            }
+            else if (_lex.CurrentCode == 19)
+            {
+                ParseArrayType();
+            }
+            else
+            {
+                InputOutput.AddError(305, _lex.CurrentPosition);
+            }
+        }
+
+        private bool IsArrayBound()
+        {
+            return _lex.CurrentCode == LexicalAnalyzer.IntegerCode ||
+                   _lex.CurrentCode == LexicalAnalyzer.IdentifierCode;
+        }
+
+        private void ParseArrayType()
+        {
+            _lex.NextToken();
+
+            if (_lex.CurrentCode != LexicalAnalyzer.LeftSquareBracketCode)
+            {
+                InputOutput.AddError(313, _lex.CurrentPosition);
+                return;
+            }
+
+            _lex.NextToken();
+
+            if (!IsArrayBound())
+            {
+                InputOutput.AddError(313, _lex.CurrentPosition);
+            }
+            else
+            {
+                _lex.NextToken();
+            }
+
+            if (_lex.CurrentCode != LexicalAnalyzer.RangeCode)
+            {
+                InputOutput.AddError(313, _lex.CurrentPosition);
+            }
+            else
+            {
+                _lex.NextToken();
+            }
+
+            if (!IsArrayBound())
+            {
+                InputOutput.AddError(313, _lex.CurrentPosition);
+            }
+            else
+            {
+                _lex.NextToken();
+            }
+
+            if (_lex.CurrentCode != LexicalAnalyzer.RightSquareBracketCode)
+            {
+                InputOutput.AddError(315, _lex.CurrentPosition);
+            }
+            else
+            {
+                _lex.NextToken();
+            }
+
+            if (_lex.CurrentCode != 20)
+            {
+                InputOutput.AddError(316, _lex.CurrentPosition);
+            }
+            else
+            {
+                _lex.NextToken();
+            }
+
+            if (_lex.CurrentCode == 6 || _lex.CurrentCode == 7 || _lex.CurrentCode == 8)
+            {
+                _lex.NextToken();
+            }
+            else
+            {
+                InputOutput.AddError(305, _lex.CurrentPosition);
+            }
+        }
+
+        private void SkipTo(int code)
+        {
+            while (_lex.CurrentCode != 0 && _lex.CurrentCode != code)
+            {
+                _lex.NextToken();
             }
         }
     }
